@@ -73,64 +73,6 @@ const APP = {
     if (!this.currentUser) {
       this.currentUser = { name: 'Admin', email: 'admin@smart.com', role: 'Admin' };
     }
-  },
-
-  addHistory(lightId, lightName, action) {
-    const entry = {
-      id: this.state.nextId.history++,
-      lightId, lightName, action,
-      user: this.currentUser ? this.currentUser.name : 'Admin',
-      timestamp: Date.now()
-    };
-    this.state.history.unshift(entry);
-    this.save();
-    return entry;
-  },
-
-  toggleLight(id) {
-    const light = this.state.lights.find(l => l.id === id);
-    if (!light) return;
-    light.on = !light.on;
-    if (light.on) {
-      light.onSince = Date.now();
-      light.intensity = light.intensity || 80;
-    } else {
-      light.onSince = null;
-      light.intensity = 0;
-    }
-    this.addHistory(id, light.name, light.on ? 'ON' : 'OFF');
-    this.save();
-    return light;
-  },
-
-  getAlerts() {
-    const alerts = [];
-    const threshold = 4 * 3600000; // 4 heures
-    this.state.lights.forEach(l => {
-      if (l.on && l.onSince && (Date.now() - l.onSince) > threshold) {
-        const hours = Math.floor((Date.now() - l.onSince) / 3600000);
-        alerts.push({ lightId: l.id, lightName: l.name, hours });
-      }
-    });
-    return alerts;
-  },
-
-  getRoomLightCount(roomId) {
-    return this.state.lights.filter(l => l.roomId === roomId).length;
-  },
-
-  getBuildingRoomCount(buildingId) {
-    return this.state.rooms.filter(r => r.buildingId === buildingId).length;
-  },
-
-  formatDate(ts) {
-    return new Date(ts).toLocaleString('fr-FR');
-  },
-
-  logout() {
-    this.currentUser = null;
-    localStorage.removeItem('sls_user');
-    window.location.href = 'index.html';
   }
 };
 
@@ -187,7 +129,7 @@ function getSidebar(active) {
     ['statistics.html','Statistiques','📈'],
     ['users.html','Utilisateurs','👥'],
   ];
-  const alerts = APP.getAlerts().length;
+  const alerts = APP.getAlerts ? APP.getAlerts().length : 0;
   const alertBadge = alerts > 0 ? `<span style="background:#ef4444;color:#fff;border-radius:50%;padding:1px 6px;font-size:.7rem;margin-left:6px;">${alerts}</span>` : '';
   return `
   <aside class="sidebar p-3">
