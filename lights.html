@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Lampes | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <h4>💡 Gestion des Lampes</h4>
+      <button class="btn btn-primary" onclick="openModal()">+ Ajouter Lampe</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <input type="text" id="search" placeholder="🔍 Rechercher..." oninput="render()" style="flex:1;min-width:160px;">
+      <select id="filter-building" onchange="fillRoomFilter();render()">
+        <option value="">Tous les bâtiments</option>
+      </select>
+      <select id="filter-room" onchange="render()">
+        <option value="">Toutes les salles</option>
+      </select>
+      <select id="filter-status" onchange="render()">
+        <option value="">Tous états</option>
+        <option value="on">ON uniquement</option>
+        <option value="off">OFF uniquement</option>
+        <option value="alert">⚠️ En alerte</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <table class="table mb-0">
+        <thead style="background:#1a1a2e;color:#fff;">
+          <tr>
+            <th style="padding:14px 16px;border:none;">Lampe</th>
+            <th style="padding:14px 16px;border:none;">Salle</th>
+            <th style="padding:14px 16px;border:none;">Bâtiment</th>
+            <th style="padding:14px 16px;border:none;">État</th>
+            <th style="padding:14px 16px;border:none;">Intensité</th>
+            <th style="padding:14px 16px;border:none;">Durée ON</th>
+            <th style="padding:14px 16px;border:none;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lights-body"></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal Ajout/Édition -->
+<div id="modal" style="display:none;" class="modal-backdrop-custom">
+  <div class="modal-box">
+    <h5 id="modal-title">Ajouter une Lampe</h5>
+    <input type="hidden" id="edit-id">
+    <div class="mb-3">
+      <label class="form-label">Nom de la lampe *</label>
+      <input type="text" id="f-name" class="form-control" placeholder="ex: L11">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Salle *</label>
+      <select id="f-room" class="form-select"></select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Intensité initiale</label>
+      <input type="range" id="f-intensity" min="0" max="100" value="80" oninput="document.getElementById('intensity-val').textContent=this.value+'%'">
+      <span id="intensity-val">80%</span>
+    </div>
+    <div class="modal-footer-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary btn-sm" onclick="saveLight()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!APP.currentUser) window.location.href = 'index.html';
+  document.getElementById('sidebar-container').innerHTML = getSidebar('lights.html');
+
+  function populateFilters() {
+    const fb = document.getElementById('filter-building');
+    const cv = fb.value;
+    fb.innerHTML = '<option value="">Tous les bâtiments</option>' +
+      APP.state.buildings.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    fb.value = cv;
+    fillRoomFilter();
+  }
+
+  function fillRoomFilter() {
+    const bId = parseInt(document.getElementById('filter-building').value);
+    const rooms = bId ? APP.state.rooms.filter(r => r.buildingId === bId) : APP.state.rooms;
+    const fr = document.getElementById('filter-room');
+    const cv = fr.value;
+    fr.innerHTML = '<option value="">Toutes les salles</option>' + rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    fr.value = cv;
+  }
+
+  function render() {
+    populateFilters();
+    const search = document.getElementById('search').value.toLowerCase();
+    const bFilter = parseInt(document.getElementById('filter-building').value);
+    const rFilter = parseInt(document.getElementById('filter-room').value);
+    const statusFilter = document.getElementById('filter-status').value;
+    const alertLights = APP.getAlerts().map(a => a.lightId);
+
+    let lights = APP.state.lights;
+    if (bFilter) {
+      const roomIds = APP.state.rooms.filter(r => r.buildingId === bFilter).map(r => r.id);
+      lights = lights.filter(l => roomIds.includes(l.roomId));
+    }
+    if (rFilter) lights = lights.filter(l => l.roomId === rFilter);
+    if (statusFilter === 'on') lights = lights.filter(l => l.on);
+    if (statusFilter === 'off') lights = lights.filter(l => !l.on);
+    if (statusFilter === 'alert') lights = lights.filter(l => alertLights.includes(l.id));
+    if (search) lights = lights.filter(l => l.name.toLowerCase().includes(search));
+
+    const tbody = document.getElementById('lights-body');
+    if (lights.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Aucune lampe trouvée.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lights.map(l => {
+      const room = APP.state.rooms.find(r => r.id === l.roomId);
+      const building = room ? APP.state.buildings.find(b => b.id === room.buildingId) : null;
+      const isAlert = alertLights.includes(l.id);
+      const hours = l.on && l.onSince ? Math.floor((Date.now() - l.onSince) / 3600000) : 0;
+      const mins = l.on && l.onSince ? Math.floor(((Date.now() - l.onSince) % 3600000) / 60000) : 0;
+      return `<tr style="${isAlert ? 'background:rgba(239,68,68,.04);' : ''}">
+        <td style="padding:12px 16px;font-weight:600;font-family:'Space Mono',monospace;">${l.name} ${isAlert ? '<span class="badge-alert">⚠️ Alerte</span>' : ''}</td>
+        <td style="padding:12px 16px;color:#6b7280;">${room ? room.name : '—'}</td>
+        <td style="padding:12px 16px;color:#6b7280;">${building ? building.name : '—'}</td>
+        <td style="padding:12px 16px;">
+          <div class="form-check form-switch light-switch mb-0">
+            <input class="form-check-input" type="checkbox" ${l.on ? 'checked' : ''} onchange="toggleLight(${l.id})" style="cursor:pointer;">
+          </div>
+          <small style="color:${l.on ? '#22c55e' : '#9ca3af'};font-weight:600;">${l.on ? 'ON' : 'OFF'}</small>
+        </td>
+        <td style="padding:12px 16px;min-width:150px;">
+          <input type="range" min="0" max="100" value="${l.intensity}" 
+            ${!l.on ? 'disabled' : ''}
+            oninput="setIntensity(${l.id}, this.value, this)"
+            style="width:100px;${!l.on ? 'opacity:.4;' : ''}">
+          <span style="font-size:.8rem;font-family:'Space Mono',monospace;margin-left:6px;">${l.intensity}%</span>
+        </td>
+        <td style="padding:12px 16px;font-size:.8rem;color:#6b7280;font-family:'Space Mono',monospace;">
+          ${l.on ? `${hours}h ${mins}m` : '—'}
+        </td>
+        <td style="padding:12px 16px;">
+          <button class="btn btn-sm btn-warning me-1" onclick="openModal(${l.id})">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteLight(${l.id})">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function toggleLight(id) {
+    APP.toggleLight(id);
+    showToast(`Lampe ${APP.state.lights.find(l=>l.id===id).on ? 'allumée' : 'éteinte'}`,'success');
+    render();
+  }
+
+  function setIntensity(id, val, el) {
+    const light = APP.state.lights.find(l => l.id === id);
+    if (light) { light.intensity = parseInt(val); APP.save(); }
+    el.nextElementSibling.textContent = val + '%';
+  }
+
+  function openModal(id) {
+    document.getElementById('edit-id').value = id || '';
+    const fr = document.getElementById('f-room');
+    fr.innerHTML = APP.state.rooms.map(r => {
+      const b = APP.state.buildings.find(b => b.id === r.buildingId);
+      return `<option value="${r.id}">${r.name} (${b ? b.name : '?'})</option>`;
+    }).join('');
+    if (id) {
+      const l = APP.state.lights.find(l => l.id === id);
+      document.getElementById('modal-title').textContent = 'Modifier la Lampe';
+      document.getElementById('f-name').value = l.name;
+      document.getElementById('f-room').value = l.roomId;
+      document.getElementById('f-intensity').value = l.intensity;
+      document.getElementById('intensity-val').textContent = l.intensity + '%';
+    } else {
+      document.getElementById('modal-title').textContent = 'Ajouter une Lampe';
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-intensity').value = 80;
+      document.getElementById('intensity-val').textContent = '80%';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+  function saveLight() {
+    const name = document.getElementById('f-name').value.trim();
+    const roomId = parseInt(document.getElementById('f-room').value);
+    const intensity = parseInt(document.getElementById('f-intensity').value);
+    if (!name) { showToast('Le nom est obligatoire','warning'); return; }
+    const id = document.getElementById('edit-id').value;
+    if (id) {
+      const l = APP.state.lights.find(l => l.id === parseInt(id));
+      l.name = name; l.roomId = roomId; l.intensity = intensity;
+      showToast('Lampe modifiée');
+    } else {
+      APP.state.lights.push({
+        id: APP.state.nextId.lights++, name, roomId,
+        on: false, intensity: 0, onSince: null
+      });
+      showToast('Lampe ajoutée');
+    }
+    APP.save(); closeModal(); render();
+  }
+
+  function deleteLight(id) {
+    const l = APP.state.lights.find(l => l.id === id);
+    confirmAction(`Supprimer la lampe "<strong>${l.name}</strong>" ?`, () => {
+      APP.state.lights = APP.state.lights.filter(l => l.id !== id);
+      APP.save(); showToast('Lampe supprimée','danger'); render();
+    });
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  render();
+  setInterval(render, 60000); // refresh durations every minute
+</script>
+</body>
+</html>

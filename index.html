@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Light System | Connexion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="text-center mb-4">
+      <div style="font-size:2.5rem;margin-bottom:8px;">💡</div>
+      <h3 style="font-weight:800;color:#1a1a2e;margin:0;">Smart Light System</h3>
+      <p style="color:#6b7280;font-size:.9rem;margin-top:4px;">Connexion à votre espace de gestion</p>
+    </div>
+
+    <form id="loginForm" novalidate>
+      <div class="mb-3">
+        <label for="email" style="font-size:.85rem;font-weight:600;display:block;margin-bottom:6px;">Adresse email</label>
+        <input type="email" id="email" class="form-control" placeholder="admin@smart.com" style="border-radius:10px;" required>
+      </div>
+      <div class="mb-3">
+        <label for="password" style="font-size:.85rem;font-weight:600;display:block;margin-bottom:6px;">Mot de passe</label>
+        <input type="password" id="password" class="form-control" placeholder="••••••••" style="border-radius:10px;" required>
+      </div>
+
+      <div id="loginError" class="alert alert-danger d-none py-2" style="border-radius:10px;font-size:.875rem;">
+        Email ou mot de passe incorrect.
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn btn-primary w-100 mt-2" style="padding:12px;font-weight:700;font-size:1rem;">
+        Se connecter
+      </button>
+    </form>
+
+    <p style="text-align:center;font-size:.8rem;color:#9ca3af;margin-top:24px;">
+      © 2026 Smart Light System — innodla
+    </p>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (APP.currentUser) window.location.href = 'dashboard.html';
+
+    const USERS = [
+      { email: 'admin@gmail.com', password: 'admin123', name: 'Admin', role: 'Admin' },
+      { email: 'jean@gmail.com', password: 'jean123', name: 'Technicien Jean', role: 'Technicien' },
+    ];
+
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const emailVal = document.getElementById('email').value.trim().toLowerCase();
+      const passVal = document.getElementById('password').value;
+      const err = document.getElementById('loginError');
+      const btn = document.getElementById('submitBtn');
+      err.classList.add('d-none');
+      btn.disabled = true;
+      btn.textContent = 'Connexion...';
+
+      setTimeout(() => {
+        const user = USERS.find(u => u.email === emailVal && u.password === passVal);
+        // Also allow any non-empty credentials for demo
+        const matched = user || (emailVal && passVal);
+        if (matched) {
+          APP.currentUser = user || { email: emailVal, name: emailVal.split('@')[0], role: 'Admin' };
+          APP.save();
+          window.location.href = 'dashboard.html';
+        } else {
+          err.classList.remove('d-none');
+          document.getElementById('password').value = '';
+          btn.disabled = false;
+          btn.textContent = 'Se connecter';
+        }
+      }, 500);
+    });
+  </script>
+</body>
+</html>

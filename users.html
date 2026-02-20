@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Utilisateurs | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <h4>👥 Gestion des Utilisateurs</h4>
+      <button class="btn btn-primary" onclick="openModal()">+ Ajouter Utilisateur</button>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" id="search" placeholder="🔍 Rechercher un utilisateur..." oninput="render()" style="flex:1;min-width:180px;">
+      <select id="filter-role" onchange="render()">
+        <option value="">Tous les rôles</option>
+        <option>Admin</option>
+        <option>Technicien</option>
+        <option>Viewer</option>
+      </select>
+      <select id="filter-status" onchange="render()">
+        <option value="">Tous statuts</option>
+        <option value="active">Actifs</option>
+        <option value="inactive">Inactifs</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <table class="table mb-0">
+        <thead style="background:#1a1a2e;color:#fff;">
+          <tr>
+            <th style="padding:14px 16px;border:none;">Utilisateur</th>
+            <th style="padding:14px 16px;border:none;">Email</th>
+            <th style="padding:14px 16px;border:none;">Rôle</th>
+            <th style="padding:14px 16px;border:none;">Statut</th>
+            <th style="padding:14px 16px;border:none;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" style="display:none;" class="modal-backdrop-custom">
+  <div class="modal-box">
+    <h5 id="modal-title">Ajouter un Utilisateur</h5>
+    <input type="hidden" id="edit-id">
+    <div class="mb-3">
+      <label class="form-label">Nom complet *</label>
+      <input type="text" id="f-name" class="form-control" placeholder="ex: Marie Dupont">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Email *</label>
+      <input type="email" id="f-email" class="form-control" placeholder="marie@smart.com">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Rôle</label>
+      <select id="f-role" class="form-select">
+        <option>Admin</option>
+        <option>Technicien</option>
+        <option>Viewer</option>
+      </select>
+    </div>
+    <div class="modal-footer-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary btn-sm" onclick="saveUser()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!APP.currentUser) window.location.href = 'index.html';
+  document.getElementById('sidebar-container').innerHTML = getSidebar('users.html');
+
+  const roleColors = { Admin: '#ef4444', Technicien: '#f59e0b', Viewer: '#3b82f6' };
+
+  function render() {
+    const search = document.getElementById('search').value.toLowerCase();
+    const roleF = document.getElementById('filter-role').value;
+    const statusF = document.getElementById('filter-status').value;
+
+    let users = APP.state.users;
+    if (search) users = users.filter(u => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search));
+    if (roleF) users = users.filter(u => u.role === roleF);
+    if (statusF === 'active') users = users.filter(u => u.active);
+    if (statusF === 'inactive') users = users.filter(u => !u.active);
+
+    const tbody = document.getElementById('users-body');
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucun utilisateur trouvé.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const initials = u.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+      return `<tr style="${!u.active ? 'opacity:.55;' : ''}">
+        <td style="padding:12px 16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:${roleColors[u.role]||'#6b7280'};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.8rem;">
+              ${initials}
+            </div>
+            <span style="font-weight:600;">${u.name}</span>
+          </div>
+        </td>
+        <td style="padding:12px 16px;color:#6b7280;">${u.email}</td>
+        <td style="padding:12px 16px;">
+          <span style="background:${roleColors[u.role]||'#6b7280'}22;color:${roleColors[u.role]||'#6b7280'};padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;">
+            ${u.role}
+          </span>
+        </td>
+        <td style="padding:12px 16px;">
+          ${u.active
+            ? '<span class="badge-on">✅ Actif</span>'
+            : '<span class="badge-off">⛔ Inactif</span>'}
+        </td>
+        <td style="padding:12px 16px;">
+          <button class="btn btn-sm btn-warning me-1" onclick="openModal(${u.id})">✏️</button>
+          <button class="btn btn-sm ${u.active ? 'btn-secondary' : 'btn-success'} me-1" onclick="toggleUser(${u.id})">
+            ${u.active ? '🔒 Désactiver' : '🔓 Activer'}
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openModal(id) {
+    document.getElementById('edit-id').value = id || '';
+    if (id) {
+      const u = APP.state.users.find(u => u.id === id);
+      document.getElementById('modal-title').textContent = 'Modifier l\'Utilisateur';
+      document.getElementById('f-name').value = u.name;
+      document.getElementById('f-email').value = u.email;
+      document.getElementById('f-role').value = u.role;
+    } else {
+      document.getElementById('modal-title').textContent = 'Ajouter un Utilisateur';
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-email').value = '';
+      document.getElementById('f-role').value = 'Viewer';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+  function saveUser() {
+    const name = document.getElementById('f-name').value.trim();
+    const email = document.getElementById('f-email').value.trim();
+    const role = document.getElementById('f-role').value;
+    if (!name || !email) { showToast('Nom et email obligatoires','warning'); return; }
+    const id = document.getElementById('edit-id').value;
+    if (id) {
+      const u = APP.state.users.find(u => u.id === parseInt(id));
+      u.name = name; u.email = email; u.role = role;
+      showToast('Utilisateur modifié');
+    } else {
+      APP.state.users.push({ id: APP.state.nextId.users++, name, email, role, active: true });
+      showToast('Utilisateur ajouté');
+    }
+    APP.save(); closeModal(); render();
+  }
+
+  function toggleUser(id) {
+    const u = APP.state.users.find(u => u.id === id);
+    u.active = !u.active;
+    APP.save();
+    showToast(u.active ? 'Compte activé' : 'Compte désactivé', u.active ? 'success' : 'warning');
+    render();
+  }
+
+  function deleteUser(id) {
+    const u = APP.state.users.find(u => u.id === id);
+    confirmAction(`Supprimer l'utilisateur "<strong>${u.name}</strong>" ?`, () => {
+      APP.state.users = APP.state.users.filter(u => u.id !== id);
+      APP.save(); showToast('Utilisateur supprimé','danger'); render();
+    });
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  render();
+</script>
+</body>
+</html>

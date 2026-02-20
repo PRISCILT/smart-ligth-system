@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Bâtiments | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <h4>🏢 Gestion des Bâtiments</h4>
+      <button class="btn btn-primary" onclick="openModal()">+ Ajouter Bâtiment</button>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <input type="text" id="search" placeholder="🔍 Rechercher un bâtiment..." oninput="render()" style="flex:1;min-width:180px;">
+    </div>
+
+    <div class="card">
+      <table class="table mb-0" id="buildings-table">
+        <thead style="background:#1a1a2e;color:#fff;">
+          <tr>
+            <th style="padding:14px 16px;border:none;">Bâtiment</th>
+            <th style="padding:14px 16px;border:none;">Adresse</th>
+            <th style="padding:14px 16px;border:none;">Salles</th>
+            <th style="padding:14px 16px;border:none;">Lampes</th>
+            <th style="padding:14px 16px;border:none;">Actions groupées</th>
+            <th style="padding:14px 16px;border:none;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="buildings-body"></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" style="display:none;" class="modal-backdrop-custom">
+  <div class="modal-box">
+    <h5 id="modal-title">Ajouter un Bâtiment</h5>
+    <input type="hidden" id="edit-id">
+    <div class="mb-3">
+      <label class="form-label">Nom du bâtiment *</label>
+      <input type="text" id="f-name" class="form-control" placeholder="ex: Bâtiment D">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Adresse</label>
+      <input type="text" id="f-address" class="form-control" placeholder="ex: Rue du Campus">
+    </div>
+    <div class="modal-footer-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary btn-sm" onclick="saveBuilding()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  document.getElementById('sidebar-container').innerHTML = getSidebar('buildings.html');
+
+  function render() {
+    const search = document.getElementById('search').value.toLowerCase();
+    const filtered = APP.state.buildings.filter(b =>
+      b.name.toLowerCase().includes(search) || (b.address||'').toLowerCase().includes(search)
+    );
+    const tbody = document.getElementById('buildings-body');
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucun bâtiment trouvé.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = filtered.map(b => {
+      const rooms = APP.state.rooms.filter(r => r.buildingId === b.id);
+      const roomIds = rooms.map(r => r.id);
+      const lights = APP.state.lights.filter(l => roomIds.includes(l.roomId));
+      const onCount = lights.filter(l => l.on).length;
+      return `<tr>
+        <td style="padding:14px 16px;font-weight:600;">${b.name}</td>
+        <td style="padding:14px 16px;color:#6b7280;">${b.address || '—'}</td>
+        <td style="padding:14px 16px;">
+          <a href="rooms.html" style="color:#3b82f6;text-decoration:none;font-weight:600;">${rooms.length} salle(s)</a>
+        </td>
+        <td style="padding:14px 16px;">
+          <span class="badge-on">${onCount} ON</span>
+          <span class="badge-off">${lights.length - onCount} OFF</span>
+        </td>
+        <td style="padding:14px 16px;">
+          <button class="btn btn-sm btn-success me-1" onclick="groupAction(${b.id},'ON')">Tout ON</button>
+          <button class="btn btn-sm btn-secondary" onclick="groupAction(${b.id},'OFF')">Tout OFF</button>
+        </td>
+        <td style="padding:14px 16px;">
+          <button class="btn btn-sm btn-warning me-1" onclick="openModal(${b.id})">✏️ Éditer</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteBuilding(${b.id})">🗑 Suppr.</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openModal(id) {
+    document.getElementById('edit-id').value = id || '';
+    if (id) {
+      const b = APP.state.buildings.find(b => b.id === id);
+      document.getElementById('modal-title').textContent = 'Modifier le Bâtiment';
+      document.getElementById('f-name').value = b.name;
+      document.getElementById('f-address').value = b.address || '';
+    } else {
+      document.getElementById('modal-title').textContent = 'Ajouter un Bâtiment';
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-address').value = '';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+  function saveBuilding() {
+    const name = document.getElementById('f-name').value.trim();
+    if (!name) { showToast('Le nom est obligatoire','warning'); return; }
+    const id = document.getElementById('edit-id').value;
+    if (id) {
+      const b = APP.state.buildings.find(b => b.id === parseInt(id));
+      b.name = name;
+      b.address = document.getElementById('f-address').value.trim();
+      showToast('Bâtiment modifié avec succès');
+    } else {
+      APP.state.buildings.push({
+        id: APP.state.nextId.buildings++,
+        name,
+        address: document.getElementById('f-address').value.trim()
+      });
+      showToast('Bâtiment ajouté avec succès');
+    }
+    APP.save();
+    closeModal();
+    render();
+  }
+
+  function deleteBuilding(id) {
+    const b = APP.state.buildings.find(b => b.id === id);
+    confirmAction(`Supprimer "<strong>${b.name}</strong>" et toutes ses salles ?`, () => {
+      const roomIds = APP.state.rooms.filter(r => r.buildingId === id).map(r => r.id);
+      APP.state.lights = APP.state.lights.filter(l => !roomIds.includes(l.roomId));
+      APP.state.rooms = APP.state.rooms.filter(r => r.buildingId !== id);
+      APP.state.buildings = APP.state.buildings.filter(b => b.id !== id);
+      APP.save();
+      showToast('Bâtiment supprimé', 'danger');
+      render();
+    });
+  }
+
+  function groupAction(buildingId, action) {
+    const roomIds = APP.state.rooms.filter(r => r.buildingId === buildingId).map(r => r.id);
+    let count = 0;
+    APP.state.lights.forEach(l => {
+      if (roomIds.includes(l.roomId)) {
+        const shouldBe = action === 'ON';
+        if (l.on !== shouldBe) { APP.toggleLight(l.id); count++; }
+      }
+    });
+    showToast(`${count} lampe(s) ${action === 'ON' ? 'allumée(s)' : 'éteinte(s)'}`, 'success');
+    render();
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  render();
+</script>
+</body>
+</html>

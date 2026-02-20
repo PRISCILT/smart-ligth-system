@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Statistiques | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <h4>📈 Statistiques</h4>
+      <small style="color:#6b7280;">Données calculées en temps réel</small>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4" id="kpi-cards"></div>
+
+    <div class="row g-3 mb-4">
+      <!-- Lampes par état -->
+      <div class="col-md-4">
+        <div class="card p-3 h-100">
+          <h6 style="font-weight:700;margin-bottom:16px;">💡 État des lampes</h6>
+          <div id="donut-chart" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+      </div>
+      <!-- Consommation par bâtiment -->
+      <div class="col-md-8">
+        <div class="card p-3 h-100">
+          <h6 style="font-weight:700;margin-bottom:16px;">⚡ Consommation par bâtiment (estimée)</h6>
+          <div id="building-consumption"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Top lampes allumées longtemps -->
+      <div class="col-md-6">
+        <div class="card p-3">
+          <h6 style="font-weight:700;margin-bottom:16px;">⏱️ Lampes allumées le plus longtemps</h6>
+          <div id="top-lights"></div>
+        </div>
+      </div>
+      <!-- Activité par utilisateur -->
+      <div class="col-md-6">
+        <div class="card p-3">
+          <h6 style="font-weight:700;margin-bottom:16px;">👥 Activité par utilisateur</h6>
+          <div id="user-activity"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!APP.currentUser) window.location.href = 'index.html';
+  document.getElementById('sidebar-container').innerHTML = getSidebar('statistics.html');
+
+  function bar(pct, color, label, value) {
+    return `<div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px;">
+        <span style="font-weight:600;">${label}</span>
+        <span style="color:#6b7280;font-family:'Space Mono',monospace;">${value}</span>
+      </div>
+      <div style="background:#f0f2f5;border-radius:20px;height:10px;">
+        <div style="background:${color};width:${pct}%;height:10px;border-radius:20px;transition:width .6s ease;"></div>
+      </div>
+    </div>`;
+  }
+
+  function render() {
+    const lights = APP.state.lights;
+    const on = lights.filter(l => l.on).length;
+    const off = lights.length - on;
+    const alerts = APP.getAlerts().length;
+    const totalW = lights.filter(l=>l.on).reduce((a,l)=>a+(l.intensity||0)*0.6,0).toFixed(0);
+    const totalHistory = APP.state.history.length;
+
+    // KPI
+    document.getElementById('kpi-cards').innerHTML = [
+      { label:'Total lampes', value: lights.length, icon:'💡', color:'#3b82f6' },
+      { label:'Allumées', value: on, icon:'✅', color:'#22c55e' },
+      { label:'Éteintes', value: off, icon:'⬜', color:'#6b7280' },
+      { label:'Alertes', value: alerts, icon:'🚨', color:'#ef4444' },
+      { label:'Conso. estimée', value: totalW+' W', icon:'⚡', color:'#f59e0b' },
+      { label:'Actions totales', value: totalHistory, icon:'📋', color:'#8b5cf6' },
+    ].map(c => `
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card" style="border-top:3px solid ${c.color};">
+          <div class="stat-label">${c.icon} ${c.label}</div>
+          <div class="stat-value" style="color:${c.color};font-size:1.5rem;">${c.value}</div>
+        </div>
+      </div>`).join('');
+
+    // Donut-like
+    const pctOn = lights.length ? Math.round(on / lights.length * 100) : 0;
+    document.getElementById('donut-chart').innerHTML = `
+      <div style="text-align:center;padding:20px 0;">
+        <div style="font-size:3rem;font-weight:800;font-family:'Space Mono',monospace;color:#22c55e;">${pctOn}%</div>
+        <div style="color:#6b7280;font-size:.85rem;">allumées</div>
+      </div>
+      ${bar(pctOn,'#22c55e','✅ Allumées', on)}
+      ${bar(100-pctOn,'#e5e7eb','⬜ Éteintes', off)}
+      ${bar(lights.length ? Math.round(alerts/lights.length*100) : 0,'#ef4444','🚨 En alerte', alerts)}
+    `;
+
+    // By building
+    const maxW = Math.max(...APP.state.buildings.map(b => {
+      const rIds = APP.state.rooms.filter(r=>r.buildingId===b.id).map(r=>r.id);
+      return APP.state.lights.filter(l=>rIds.includes(l.roomId)&&l.on).reduce((a,l)=>a+(l.intensity||0)*0.6,0);
+    }), 1);
+    document.getElementById('building-consumption').innerHTML = APP.state.buildings.map(b => {
+      const rIds = APP.state.rooms.filter(r=>r.buildingId===b.id).map(r=>r.id);
+      const bLights = APP.state.lights.filter(l=>rIds.includes(l.roomId));
+      const bOn = bLights.filter(l=>l.on).length;
+      const w = bLights.filter(l=>l.on).reduce((a,l)=>a+(l.intensity||0)*0.6,0).toFixed(0);
+      return bar(Math.round(w/maxW*100),'#f59e0b', b.name, `${w}W (${bOn}/${bLights.length} lampes ON)`);
+    }).join('') || '<p style="color:#6b7280;">Aucune donnée.</p>';
+
+    // Top lights on longest
+    const onLights = lights.filter(l=>l.on&&l.onSince).map(l => ({
+      ...l, hours: (Date.now()-l.onSince)/3600000
+    })).sort((a,b)=>b.hours-a.hours).slice(0,5);
+    const maxH = Math.max(...onLights.map(l=>l.hours), 1);
+    document.getElementById('top-lights').innerHTML = onLights.length > 0
+      ? onLights.map(l => {
+          const h = Math.floor(l.hours); const m = Math.floor((l.hours%1)*60);
+          return bar(Math.round(l.hours/maxH*100), l.hours > 4 ? '#ef4444' : '#f59e0b', l.name, `${h}h ${m}m`);
+        }).join('')
+      : '<p style="color:#6b7280;font-size:.875rem;">Aucune lampe allumée.</p>';
+
+    // User activity
+    const userMap = {};
+    APP.state.history.forEach(h => { userMap[h.user] = (userMap[h.user]||0)+1; });
+    const maxActions = Math.max(...Object.values(userMap), 1);
+    document.getElementById('user-activity').innerHTML = Object.entries(userMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+      .map(([u,c]) => bar(Math.round(c/maxActions*100),'#8b5cf6',u,`${c} action(s)`)).join('')
+      || '<p style="color:#6b7280;font-size:.875rem;">Aucune activité enregistrée.</p>';
+  }
+
+  render();
+</script>
+</body>
+</html>

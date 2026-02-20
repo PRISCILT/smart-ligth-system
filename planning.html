@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Planning | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <h4>📅 Planification automatique</h4>
+      <button class="btn btn-primary" onclick="openModal()">+ Ajouter Planning</button>
+    </div>
+
+    <div class="card mb-4 p-3" style="background:linear-gradient(135deg,#1a1a2e,#2d2d4e);color:#fff;border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:2rem;">⏱️</span>
+        <div>
+          <div style="font-weight:700;font-size:1rem;">Planification automatique</div>
+          <div style="font-size:.85rem;opacity:.8;">Les lampes s'allument et s'éteignent automatiquement selon les créneaux définis. Les changements sont enregistrés dans l'historique.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <table class="table mb-0">
+        <thead style="background:#1a1a2e;color:#fff;">
+          <tr>
+            <th style="padding:14px 16px;border:none;">Lampe</th>
+            <th style="padding:14px 16px;border:none;">Salle</th>
+            <th style="padding:14px 16px;border:none;">Heure ON</th>
+            <th style="padding:14px 16px;border:none;">Heure OFF</th>
+            <th style="padding:14px 16px;border:none;">Répétition</th>
+            <th style="padding:14px 16px;border:none;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="planning-body"></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" style="display:none;" class="modal-backdrop-custom">
+  <div class="modal-box">
+    <h5 id="modal-title">Ajouter un Planning</h5>
+    <input type="hidden" id="edit-id">
+    <div class="mb-3">
+      <label class="form-label">Lampe *</label>
+      <select id="f-light" class="form-select"></select>
+    </div>
+    <div class="row mb-3">
+      <div class="col-6">
+        <label class="form-label">Heure ON *</label>
+        <input type="time" id="f-on" class="form-control" value="07:00">
+      </div>
+      <div class="col-6">
+        <label class="form-label">Heure OFF *</label>
+        <input type="time" id="f-off" class="form-control" value="22:00">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Répétition</label>
+      <select id="f-repeat" class="form-select">
+        <option>Quotidien</option>
+        <option>Lun-Ven</option>
+        <option>Week-end</option>
+        <option>Lundi</option>
+        <option>Mardi</option>
+        <option>Mercredi</option>
+        <option>Jeudi</option>
+        <option>Vendredi</option>
+        <option>Samedi</option>
+        <option>Dimanche</option>
+      </select>
+    </div>
+    <div class="modal-footer-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary btn-sm" onclick="savePlanning()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!APP.currentUser) window.location.href = 'index.html';
+  document.getElementById('sidebar-container').innerHTML = getSidebar('planning.html');
+
+  function render() {
+    const planning = APP.state.planning;
+    const tbody = document.getElementById('planning-body');
+    if (planning.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Aucun planning défini.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = planning.map(p => {
+      const light = APP.state.lights.find(l => l.id === p.lightId);
+      const room = light ? APP.state.rooms.find(r => r.id === light.roomId) : null;
+      return `<tr>
+        <td style="padding:12px 16px;font-weight:600;font-family:'Space Mono',monospace;">${p.lightName}</td>
+        <td style="padding:12px 16px;color:#6b7280;">${room ? room.name : '—'}</td>
+        <td style="padding:12px 16px;">
+          <span style="background:rgba(34,197,94,.15);color:#16a34a;padding:4px 10px;border-radius:20px;font-size:.85rem;font-weight:600;font-family:'Space Mono',monospace;">🟢 ${p.heureOn}</span>
+        </td>
+        <td style="padding:12px 16px;">
+          <span style="background:rgba(156,163,175,.15);color:#6b7280;padding:4px 10px;border-radius:20px;font-size:.85rem;font-weight:600;font-family:'Space Mono',monospace;">⚫ ${p.heureOff}</span>
+        </td>
+        <td style="padding:12px 16px;">
+          <span style="background:rgba(59,130,246,.12);color:#2563eb;padding:4px 10px;border-radius:20px;font-size:.78rem;font-weight:600;">${p.repeat}</span>
+        </td>
+        <td style="padding:12px 16px;">
+          <button class="btn btn-sm btn-warning me-1" onclick="openModal(${p.id})">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="deletePlanning(${p.id})">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openModal(id) {
+    const fl = document.getElementById('f-light');
+    fl.innerHTML = APP.state.lights.map(l => {
+      const r = APP.state.rooms.find(r => r.id === l.roomId);
+      return `<option value="${l.id}">${l.name} (${r ? r.name : '?'})</option>`;
+    }).join('');
+    document.getElementById('edit-id').value = id || '';
+    if (id) {
+      const p = APP.state.planning.find(p => p.id === id);
+      document.getElementById('modal-title').textContent = 'Modifier le Planning';
+      document.getElementById('f-light').value = p.lightId;
+      document.getElementById('f-on').value = p.heureOn;
+      document.getElementById('f-off').value = p.heureOff;
+      document.getElementById('f-repeat').value = p.repeat;
+    } else {
+      document.getElementById('modal-title').textContent = 'Ajouter un Planning';
+    }
+    document.getElementById('modal').style.display = 'flex';
+  }
+
+  function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+  function savePlanning() {
+    const lightId = parseInt(document.getElementById('f-light').value);
+    const heureOn = document.getElementById('f-on').value;
+    const heureOff = document.getElementById('f-off').value;
+    const repeat = document.getElementById('f-repeat').value;
+    if (!heureOn || !heureOff) { showToast('Remplissez les heures','warning'); return; }
+    const light = APP.state.lights.find(l => l.id === lightId);
+    const id = document.getElementById('edit-id').value;
+    if (id) {
+      const p = APP.state.planning.find(p => p.id === parseInt(id));
+      p.lightId = lightId; p.lightName = light.name; p.heureOn = heureOn; p.heureOff = heureOff; p.repeat = repeat;
+      showToast('Planning modifié');
+    } else {
+      APP.state.planning.push({ id: APP.state.nextId.planning++, lightId, lightName: light.name, heureOn, heureOff, repeat });
+      showToast('Planning ajouté');
+    }
+    APP.save(); closeModal(); render();
+  }
+
+  function deletePlanning(id) {
+    confirmAction('Supprimer ce planning ?', () => {
+      APP.state.planning = APP.state.planning.filter(p => p.id !== id);
+      APP.save(); showToast('Planning supprimé','danger'); render();
+    });
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  render();
+</script>
+</body>
+</html>

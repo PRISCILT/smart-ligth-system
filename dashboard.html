@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard | Smart Light System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/custom.css">
+</head>
+<body>
+<div class="d-flex">
+  <div id="sidebar-container"></div>
+  <main class="flex-fill p-4 bg-light">
+
+    <div class="page-header">
+      <div>
+        <h4>Dashboard</h4>
+        <small style="color:#6b7280;" id="welcome-msg"></small>
+      </div>
+      <div style="font-family:'Space Mono',monospace;font-size:.85rem;color:#6b7280;" id="clock"></div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="row g-3 mb-4" id="stat-cards"></div>
+
+    <!-- Alertes -->
+    <div class="card p-3 mb-4">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h6 style="font-weight:700;margin:0;">🚨 Alertes temps réel</h6>
+        <span id="alert-count-badge" style="font-size:.75rem;"></span>
+      </div>
+      <div id="alerts-container"></div>
+    </div>
+
+    <!-- Actions groupées rapides -->
+    <div class="card p-3 mb-4">
+      <h6 style="font-weight:700;margin-bottom:14px;">⚡ Actions rapides</h6>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <button class="btn btn-sm btn-success" onclick="groupAction('all','ON')">✅ Tout allumer</button>
+        <button class="btn btn-sm btn-secondary" onclick="groupAction('all','OFF')">⬜ Tout éteindre</button>
+        <select id="quick-building" style="border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-size:.875rem;" onchange="fillRoomSelect()">
+          <option value="">-- Sélectionner Bâtiment --</option>
+        </select>
+        <select id="quick-room" style="border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-size:.875rem;">
+          <option value="">-- Sélectionner Salle --</option>
+        </select>
+        <button class="btn btn-sm btn-success" onclick="groupAction('room','ON')">💡 Salle ON</button>
+        <button class="btn btn-sm btn-secondary" onclick="groupAction('room','OFF')">🔌 Salle OFF</button>
+      </div>
+    </div>
+
+    <!-- Graphiques simplifiés -->
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card p-3">
+          <h6 style="font-weight:700;margin-bottom:12px;">📊 Répartition par bâtiment</h6>
+          <div id="building-chart"></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card p-3">
+          <h6 style="font-weight:700;margin-bottom:12px;">📋 Dernières actions</h6>
+          <div id="recent-history"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!APP.currentUser) window.location.href = 'index.html';
+  document.getElementById('sidebar-container').innerHTML = getSidebar('dashboard.html');
+  document.getElementById('welcome-msg').textContent = `Bienvenue, ${APP.currentUser?.name || 'Admin'}`;
+
+  // Clock
+  function updateClock() {
+    document.getElementById('clock').textContent = new Date().toLocaleString('fr-FR');
+  }
+  updateClock(); setInterval(updateClock, 1000);
+
+  function render() {
+    const lights = APP.state.lights;
+    const on = lights.filter(l => l.on).length;
+    const off = lights.length - on;
+    const kWh = Math.round(lights.filter(l=>l.on).reduce((a,l)=>a+(l.intensity||0)*0.06,0));
+    const alerts = APP.getAlerts();
+
+    // Stat cards
+    const cards = [
+      { label:'Lampes Totales', value: lights.length, icon:'💡', color:'#3b82f6' },
+      { label:'Allumées', value: on, icon:'✅', color:'#22c55e' },
+      { label:'Éteintes', value: off, icon:'⬜', color:'#6b7280' },
+      { label:'Alertes actives', value: alerts.length, icon:'🚨', color:'#ef4444' },
+      { label:'Consomm. estimée', value: kWh+' W', icon:'⚡', color:'#f59e0b' },
+      { label:'Bâtiments', value: APP.state.buildings.length, icon:'🏢', color:'#8b5cf6' },
+    ];
+    document.getElementById('stat-cards').innerHTML = cards.map(c => `
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="stat-card" style="border-top:3px solid ${c.color};">
+          <div class="stat-label">${c.icon} ${c.label}</div>
+          <div class="stat-value" style="color:${c.color};font-size:1.6rem;">${c.value}</div>
+        </div>
+      </div>`).join('');
+
+    // Alertes
+    const ac = document.getElementById('alerts-container');
+    if (alerts.length === 0) {
+      ac.innerHTML = '<p style="color:#6b7280;font-size:.875rem;margin:0;">✅ Aucune alerte — tous les systèmes sont normaux.</p>';
+    } else {
+      ac.innerHTML = alerts.map(a => `
+        <div class="alert-item" onclick="window.location.href='lights.html'">
+          <span class="alert-icon">⚠️</span>
+          <div>
+            <strong>${a.lightName}</strong> allumée depuis <strong>${a.hours}h</strong>
+            <div style="font-size:.78rem;color:#6b7280;">Cliquez pour gérer la lampe</div>
+          </div>
+          <span class="badge-alert ms-auto">ALERTE</span>
+        </div>`).join('');
+    }
+    document.getElementById('alert-count-badge').innerHTML = alerts.length > 0
+      ? `<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:20px;font-size:.75rem;">${alerts.length} alerte(s)</span>`
+      : '';
+
+    // Building chart (inline bars)
+    document.getElementById('building-chart').innerHTML = APP.state.buildings.map(b => {
+      const roomIds = APP.state.rooms.filter(r=>r.buildingId===b.id).map(r=>r.id);
+      const bLights = APP.state.lights.filter(l=>roomIds.includes(l.roomId));
+      const bOn = bLights.filter(l=>l.on).length;
+      const pct = bLights.length ? Math.round(bOn/bLights.length*100) : 0;
+      return `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:3px;">
+          <span style="font-weight:600;">${b.name}</span>
+          <span style="color:#6b7280;">${bOn}/${bLights.length} lampes ON</span>
+        </div>
+        <div style="background:#f0f2f5;border-radius:20px;height:8px;">
+          <div style="background:#22c55e;width:${pct}%;height:8px;border-radius:20px;transition:width .5s;"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Recent history
+    document.getElementById('recent-history').innerHTML = APP.state.history.slice(0,6).map(h => `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f5;">
+        <span style="font-size:1.1rem;">${h.action==='ON'?'✅':'⬜'}</span>
+        <div style="flex:1;">
+          <strong style="font-size:.85rem;">${h.lightName}</strong>
+          <span style="font-size:.78rem;color:#6b7280;margin-left:6px;">${h.user}</span>
+        </div>
+        <small style="color:#9ca3af;">${APP.formatDate(h.timestamp)}</small>
+      </div>`).join('') || '<p style="color:#6b7280;font-size:.875rem;">Aucune action récente.</p>';
+
+    // Building select
+    const qb = document.getElementById('quick-building');
+    const curVal = qb.value;
+    qb.innerHTML = '<option value="">-- Bâtiment --</option>' + APP.state.buildings.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+    qb.value = curVal;
+    fillRoomSelect();
+  }
+
+  function fillRoomSelect() {
+    const bId = parseInt(document.getElementById('quick-building').value);
+    const rooms = bId ? APP.state.rooms.filter(r=>r.buildingId===bId) : APP.state.rooms;
+    document.getElementById('quick-room').innerHTML = '<option value="">-- Salle --</option>' + rooms.map(r=>`<option value="${r.id}">${r.name}</option>`).join('');
+  }
+
+  function groupAction(scope, action) {
+    let lights;
+    if (scope === 'all') {
+      lights = APP.state.lights;
+    } else {
+      const roomId = parseInt(document.getElementById('quick-room').value);
+      if (!roomId) { showToast('Sélectionnez une salle','warning'); return; }
+      lights = APP.state.lights.filter(l=>l.roomId===roomId);
+    }
+    let count = 0;
+    lights.forEach(l => {
+      const shouldBe = action === 'ON';
+      if (l.on !== shouldBe) {
+        APP.toggleLight(l.id);
+        count++;
+      }
+    });
+    showToast(`${count} lampe(s) ${action==='ON'?'allumée(s)':'éteinte(s)'}`, 'success');
+    render();
+  }
+
+  render();
+  setInterval(render, 30000);
+</script>
+</body>
+</html>
