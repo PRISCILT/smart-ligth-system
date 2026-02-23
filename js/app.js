@@ -150,3 +150,29 @@ function getSidebar(active) {
     </div>
   </aside>`;
 }
+
+// Compatibility wrappers for functions moved to separate files
+APP.toggleLight = function(id) {
+  if (typeof toggleLight === 'function') return toggleLight(id);
+  return null;
+};
+
+APP.getAlerts = function() {
+  if (typeof getAlerts === 'function') return getAlerts();
+  return [];
+};
+
+APP.addHistory = function(lightId, lightName, action) {
+  if (typeof addHistory === 'function') return addHistory(lightId, lightName, action);
+  // fallback: record minimal history
+  const entry = {
+    id: APP.state.nextId.history++, lightId, lightName, action,
+    user: APP.currentUser ? APP.currentUser.name : 'Admin', timestamp: Date.now()
+  };
+  APP.state.history.unshift(entry); APP.save(); return entry;
+};
+
+APP.formatDate = function(ts) {
+  if (typeof formatDate === 'function') return formatDate(ts);
+  return new Date(ts).toLocaleString('fr-FR');
+};
